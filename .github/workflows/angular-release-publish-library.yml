@@ -1,0 +1,57 @@
+# This workflow orchestrates the entire release process for an Angular library
+# by calling a series of modular, reusable workflows.
+name: Release and Publish Library
+
+on:
+  workflow_call:
+    inputs:
+      library_name:
+        description: 'The project name of the library to release'
+        required: true
+        type: string
+    secrets:
+      NPM_TOKEN:
+        description: 'The token for publishing to npm'
+        required: true
+
+jobs:
+  verify:
+    name: 1. Verify Package
+    uses: profusion/github-actions/.github/workflows/angular-verify-package.yml@main
+    with:
+      library_path: 'projects/${{ inputs.library_name }}'
+      library_name: ${{ inputs.library_name }}
+      org_scope: '@profusion'
+    secrets: inherit
+
+  build:
+    name: 2. Build Library
+    needs: verify
+    uses: profusion/github-actions/.github/workflows/angular-build-library.yml@main
+    with:
+      library_name: ${{ inputs.library_name }}
+    secrets: inherit
+
+  tag:
+    name: 3. Create Git Tag
+    needs: [verify, build]
+    uses: profusion/github-actions/.github/workflows/git-tag.yml@main
+    with:
+      version: ${{ needs.verify.outputs.version }}
+      tag_prefix: ${{ github.event.inputs.library_name }}
+    secrets: inherit
+
+  release:
+    name: 4. Create GitHub Release
+    needs: [verify, tag]
+    uses: profusion/github-actions/.github/workflows/github-release.yml@main
+    with:
+      tag: ${{ github.event.inputs.library_name }}-v${{ needs.verify.outputs.version }}
+    secrets: inherit
+
+  publish:
+    name: 5. Publish to npm
+    needs: [release]
+    uses: profusion/github-actions/.github/workflows/npm-publish.yml@main
+    secrets: inherit
+
